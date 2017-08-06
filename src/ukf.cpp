@@ -24,7 +24,7 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 6; // Looks wildly off to me was 30
+  std_a_ = 1; // Looks wildly off to me was 30
 
   // Process noise standard deviation yaw acceleration in rad/s^2
   std_yawdd_ = 0.5; // Looks off to me was 30
@@ -87,12 +87,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   */
 	if (!is_initialized_) {
 		if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-		  /**
-		  Convert radar from polar to cartesian coordinates and initialize state.
-		  We get rho, theta, rho_dot. Convert them over!
-		  */
-		  //Just set ekf_.x_{0} to ro*cos(theta)
-		  //Just set ekf_.x_{1} to ro*sin(theta)
+		  // Polar to Cartesian
 		  float ro = meas_package.raw_measurements_[0];
 		  float theta = meas_package.raw_measurements_[1];
 		  x_ << ro*cos(theta), ro*sin(theta), 0, 0, 0;
@@ -107,14 +102,14 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 		is_initialized_ = true;
 		return;
 	}
-	// Control structure similar to EKF project
-	double delta_t = (meas_package.timestamp_ - time_us_)/1000000.0;
+	// Work out delta_t from timestamp and the one we stored
+	double delta_t = (meas_package.timestamp_ - time_us_) / 1000000.0;
 	Prediction(delta_t);
 	
-	if (meas_package.sensor_type_ == MeasurementPackage::LASER){
+	if (meas_package.sensor_type_ == MeasurementPackage::LASER && use_laser_){
 		UpdateLidar(meas_package);
 	}
-	else if (meas_package.sensor_type_ == MeasurementPackage::RADAR){
+	else if (meas_package.sensor_type_ == MeasurementPackage::RADAR && use_radar_){
 		UpdateRadar(meas_package);
 	}
 	time_us_ = meas_package.timestamp_;
@@ -166,9 +161,6 @@ void UKF::Prediction(double delta_t) {
   // ***************************************
   // Lesson 7.21 sigma point prediction
   // ***************************************
-  
-  
-  //predict sigma points
   for (int i = 0; i < 2 * n_aug_ + 1; i++)
   {
     //extract values for better readability
@@ -217,7 +209,6 @@ void UKF::Prediction(double delta_t) {
   // 7.24 Predicted mean and covariance
   // ***************************************
   
-  
   // set weights
   double weight_0 = lambda_ / (lambda_ + n_aug_);
   weights_(0) = weight_0;
@@ -235,7 +226,6 @@ void UKF::Prediction(double delta_t) {
   //predicted state covariance matrix
   P_.fill(0.0);
   for (int i = 0; i < 2 * n_aug_ + 1; i++) {  //iterate over sigma points
-
     // state difference
     VectorXd x_diff = Xsig_pred_.col(i) - x_;
     //angle normalization
@@ -286,6 +276,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   P_ = (I - K * H) * P_;
   
   // Calculate the NIS
+  double NIS_laser = (z - z_pred).transpose() * S.inverse() * (z - z_pred);
+  // cout << NIS_laser << "\r\n";
 }
 
 /**
@@ -394,5 +386,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   x_ = x_ + K * z_diff;
   P_ = P_ - K * S * K.transpose();
   
-  // You'll also need to calculate the radar NIS.
+  // You'll also need to calculate the radar NIS. From course video
+  double NIS_radar= (z - z_pred).transpose() * S.inverse() * (z - z_pred);
+  //cout << NIS_radar << "\r\n";
 }
